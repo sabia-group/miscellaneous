@@ -1,0 +1,34 @@
+#!/usr/bin/python3
+import numpy as np
+import pandas as pd
+from scipy.optimize import minimize
+from optparse import OptionParser
+
+
+parser = OptionParser()
+parser.add_option("-s", "--similarity", dest="similarity", help="Similarity matrix between landmarks and objects to project.")
+parser.add_option("-l", "--landmarks", dest="landmarks", help="Low dimensional representation of the landmarks")
+parser.add_option("-o", "--output", dest="output", default='projections.proj', help="Name of the output")
+(options, args) = parser.parse_args()
+
+low_land=[]
+with open(options.landmarks) as l:
+    lines = l.readlines()
+    for line in lines[1:]:
+        low_land.append(np.array([float(line.split()[0]), float(line.split()[1])]))
+        
+low_land=np.array(low_land)
+
+High_dist = pd.read_csv(options.similarity, header=None, sep='\s+')
+
+def stress(x, High_dist_vec, low_land):
+    low_distances = np.array([np.linalg.norm(x-k) for k in low_land])
+    return sum([(i-k)**2 for i,k in zip(High_dist_vec, low_distances)])
+
+with open(options.output, 'w') as p:
+    p.write('{:<30}{:<30}\n'.format('proj1', 'proj2'))
+    for i in range(len(High_dist)):
+        result=minimize(stress, low_land[0], args=(High_dist.loc[i], low_land), method='Nelder-Mead', tol=1e-6)
+        print(result.x[0], result.x[1])
+        p.write('{:<30}{:<30}\n'.format(result.x[0], result.x[1]))
+
