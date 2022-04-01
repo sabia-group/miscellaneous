@@ -20,6 +20,7 @@ atoms_ase = read(inname, format="aims")
 # which just spits out what it receives without any conversions.
 atoms_ipi = Atoms_ipi(len(atoms_ase))
 atoms_ipi.q = atoms_ase.get_positions().flatten()
+atoms_ipi.names = atoms_ase.symbols
 
 # We need to transpose the cell because i-PI and ASE use different conventions
 cell_ipi = Cell_ipi(atoms_ase.cell.T)
