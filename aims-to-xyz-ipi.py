@@ -14,7 +14,6 @@ else:
     exit(1)
 
 atoms_ase = read(inname, format="aims")
-#write(outname, atoms, format="xyz")
 
 # Careful: here I don't do any unit conversions and use raw io_xyz
 # which just spits out what it receives without any conversions.
@@ -26,6 +25,9 @@ atoms_ipi.names = atoms_ase.symbols
 cell_ipi = Cell_ipi(atoms_ase.cell.T)
 
 with open(outname, 'w') as fdout:
-    print_xyz(atoms_ipi, cell_ipi, fdout, title="positions{angstrom}  cell{angstrom}")
+    print_xyz(atoms_ipi,
+              cell_ipi,
+              fdout,
+              title="positions{angstrom}  cell{angstrom}")
 
 print("Done.")

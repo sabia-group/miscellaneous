@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-info="""This script converts XYZ file with i-PI cell to aims geometry format.
+info = """This script converts XYZ file with i-PI cell to aims geometry format.
 Attention: works only with XYZ files IN ANGSTROMS (because I'm lazy)!
 Arguments:
     inname - a XYZ file with the cell in i-PI format.
@@ -28,7 +28,7 @@ with open(inname) as infile:
         raise RuntimeError("Only input in Angstroms is supported so far.")
     cell = rr['cell']
 
-cell = cell.T # i-PI and ASE use different transpositions of the cell matrix.
+cell = cell.T  # i-PI and ASE use different transpositions of the cell matrix.
 cell = np.around(cell, decimals=8)
 
 atoms = read(inname, format='xyz')

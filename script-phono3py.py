@@ -218,15 +218,11 @@ if __name__ == '__main__':
                 sys.exit(-1)
             force_sets.append(atoms.get_forces())
 
-#    print("force_sets:")
-#    print(force_sets)
     phono3py.produce_fc3(force_sets)
     # How grid_points are treated:
     # ~/.local/lib/python3.5/site-packages/phono3py/phonon3/conductivity.py
     phono3py.run_thermal_conductivity(temperatures=temperatures,
-                                      boundary_mfp=1e6,  # in micrometre
-                                      # solve_collective_phonon=False,
-                                      # use_ave_pp=False,
+                                      boundary_mfp=1e6,  # in micrometers
                                       # gamma_unit_conversion=None,
                                       # gv_delta_q=None,  # for group velocity
                                       write_gamma=True,
