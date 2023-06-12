@@ -8,7 +8,7 @@
 import argparse
 from argparse import RawTextHelpFormatter,SUPPRESS
 from functions import str2bool
-from classes import Data
+from classes import MicroState
 
 # This script project a MD trajectoies onto the vibrational modes.
 
@@ -40,6 +40,8 @@ from classes import Data
 
 # author: Elia Stocco
 # email : stocco@fhi-berlin.mpg.de
+
+# //"args":["-c","true","-q","i-pi.positions_0.xyz","-v","i-pi.velocities_0.xyz","-r","start.xyz","-o","output","-m","vib","-p","output/energy.pdf","-pr","i-pi.properties.out"],//"-t","2500000"],
 
 
 description =  \
@@ -140,12 +142,13 @@ def main():
 
         # read input files
         print("\n\tReding input files for computation")
-        data = Data(options,what="compute")
+        data = MicroState(options,what="proj-on-vib-modes")
         
         print("\n\tComputing occupations")
-        data.compute()
+        data.project_on_vibrational_modes()
 
-        data.save(options.output)    
+        data.save(folder=options.output,\
+                  what="proj-on-vib-modes")    
 
     ###
     # plot occupations
@@ -153,7 +156,7 @@ def main():
 
         # read input files
         print("\n\tReding input files for plot")
-        data = Data(options,what="plot")
+        data = MicroState(options,what="plot-vib-modes-energy")
 
         print("\n\tPlotting normalized energy per mode")
         data.plot(options)

@@ -1,0 +1,37 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/generate-thermal-state.py",
+            //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/sequence-parity-inversion.py",
+            //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/project-on-vibrational-modes.py",
+            //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/ipi2csv.py",
+            //"program":"/home/elia/Google-Drive/google-personal/miscellaneous/elia/shift-along-vibrational-modes.py",
+            //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/IR.py",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/phBEC",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/PvsQ",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/IR",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/T-conserved",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/seq",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/test",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/GLE-300K",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/occupations-30",
+            "cwd":"/home/elia/Google-Drive/google-personal/works/displacement",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/test",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            //"args":"input.xml",
+            //"args":["-q","start.xyz","-pi","inverted.xyz"],
+            //"args":["-z","i-pi.bec.txt","-m","i-pi.phonons.mode"],
+            //"args":"RESTART",
+            //"args":["-c","true","-q","i-pi.positions_0.xyz","-v","i-pi.velocities_0.xyz","-r","start.xyz","-o","output","-m","vib","-p","output/energy.pdf","-pr","i-pi.properties.out"],//"-t","2500000"],
+            "args":["-q","start.xyz","-m","vib","-o","output","-T","300"],
+        }
+    ]
+}
