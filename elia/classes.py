@@ -1,4 +1,4 @@
-from functions import get_one_file_in_folder,getproperty
+from functions import get_one_file_in_folder,getproperty,output_file
 import os
 from ase import io #.io import read
 import numpy as np
@@ -58,7 +58,7 @@ class MicroState:
         if what == "plot-vib-modes-energy" :
             toread += [ "eigvals",\
                         "energy",\
-                        "Aamp",\
+                        "A-amplitudes",\
                         "time"]
             
         if what == "generate-thermal-state":
@@ -316,14 +316,14 @@ class MicroState:
             
         if "energy" in toread:
     
-            file = MicroState.output_file(options.output,MicroStatePrivate.ofile["energy"])
+            file = output_file(options.output,MicroStatePrivate.ofile["energy"])
             print("{:s}reading energy from file '{:s}'".format(MicroStatePrivate.tab,file))
             self.energy = np.loadtxt(file).T
 
 
-        if "Aamp" in toread:
+        if "A-amplitudes" in toread:
 
-            file = MicroState.output_file(options.output,MicroStatePrivate.ofile["Aamp"])
+            file = output_file(options.output,MicroStatePrivate.ofile["A-amplitudes"])
             print("{:s}reading A-amplitudes from file '{:s}'".format(MicroStatePrivate.tab,file))
             self.Aamplitudes = np.loadtxt(file).T
             
@@ -487,7 +487,7 @@ class MicroState:
         proj_vel   = MicroState.project_velocities  (v.T,   self.proj, self.eigvals).T
         A2 = ( np.square(proj_displ) + np.square(proj_vel) )
         energy = ( self.eigvals * A2 / 2.0 ) # w^2 A^2 / 2
-        normalized_energy = ( self.Nmodes - 3 ) * energy / energy.sum(axis=1)
+        normalized_energy = ( ( self.Nmodes - 3 ) * energy.T / energy.sum(axis=1).T ).T
         Aamplitudes = np.sqrt(A2)
 
         # print(norm(proj_displ-c))
@@ -533,25 +533,11 @@ class MicroState:
         if MicroStatePrivate.debug : print(norm(test["displacements"] - self.displacements))
 
         return out
-
-    @staticmethod
-    def output_folder(folder):
-        if folder in ["",".","./"] :
-            folder = "."
-        elif not os.path.exists(folder) :
-            print("\n\tCreating directory '{:s}'".format(folder))
-            os.mkdir(folder)
-        return folder
-    
-    @staticmethod
-    def output_file(folder,what):
-        folder = MicroState.output_folder(folder)
-        return "{:s}/{:s}".format(folder,what)
     
     def save2xyz(self,what,file=None,name=None,folder=None,atoms=None):
 
         if file is None:
-            file = MicroState.output_file(folder,MicroStatePrivate.ofile[name])
+            file = output_file(folder,MicroStatePrivate.ofile[name])
         if atoms is None :
             atoms = self.atoms
 
@@ -589,7 +575,7 @@ class MicroState:
     @staticmethod
     def save2txt(what,file=None,name=None,folder=None):
         if file is None:
-            file = MicroState.output_file(folder,MicroStatePrivate.ofile[name])
+            file = output_file(folder,MicroStatePrivate.ofile[name])
         print("{:s}saving {:s} to file '{:s}'".format(MicroStatePrivate.tab,name,file))
         np.savetxt(file,what.T, fmt=MicroStatePrivate.fmt)
         pass
@@ -598,27 +584,27 @@ class MicroState:
 
         if what == "proj-on-vib-modes":
             MicroState.save2txt(what=self.energy,name="energy",folder=folder)
-            # file = MicroState.output_file(folder,MicroStatePrivate.ofile["energy"])
+            # file = output_file(folder,MicroStatePrivate.ofile["energy"])
             # print("{:s}saving energy to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.energy.T, fmt=MicroStatePrivate.fmt)
 
             MicroState.save2txt(what=self.occupations,name="occupations",folder=folder)
-            # file = MicroState.output_file(folder,MicroStatePrivate.ofile["occupations"])
+            # file = output_file(folder,MicroStatePrivate.ofile["occupations"])
             # print("{:s}saving occupations to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.occupations.T, fmt=MicroStatePrivate.fmt)
 
             MicroState.save2txt(what=self.phases,name="phases",folder=folder)
-            # file = MicroState.output_file(folder,MicroStatePrivate.ofile["phases"])
+            # file = output_file(folder,MicroStatePrivate.ofile["phases"])
             # print("{:s}saving phases to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.phases.T, fmt=MicroStatePrivate.fmt)
 
             MicroState.save2txt(self.Aamplitudes,name="A-amplitudes",folder=folder)
-            # file = MicroState.output_file(folder,MicroStatePrivate.ofile["Aamp"])
+            # file = output_file(folder,MicroStatePrivate.ofile["Aamp"])
             # print("{:s}saving A-amplitudes to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.Aamplitudes.T,fmt=MicroStatePrivate.fmt)
 
             MicroState.save2txt(what=self.Bamplitudes,name="B-amplitudes",folder=folder)
-            # file = MicroState.output_file(folder,MicroStatePrivate.ofile["Bamp"])
+            # file = output_file(folder,MicroStatePrivate.ofile["Bamp"])
             # print("{:s}saving B-amplitudes to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.Bamplitudes.T,fmt=MicroStatePrivate.fmt)
 
@@ -697,7 +683,7 @@ class MicroState:
         df["w"] = w
         df["mean"] = mean
         df["std"] = std
-        file = file = MicroState.output_file(options.output,MicroStatePrivate.ofile["violin"])
+        file = file = output_file(options.output,MicroStatePrivate.ofile["violin"])
         df.to_csv(file,index=False)
 
         pass

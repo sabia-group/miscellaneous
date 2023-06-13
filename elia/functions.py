@@ -175,3 +175,64 @@ def getproperty(inputfile, propertyname,data=None,skip="0"):
 
             except EOFError:
                 break
+
+
+def vector_type(arg_value):
+    try:
+        # Split the input string by commas and convert each element to an integer
+        values = [int(x) for x in arg_value.split(',')]
+        return values
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"Invalid vector: {arg_value}") from e
+    
+def output_folder(folder):
+    if folder in ["",".","./"] :
+        folder = "."
+    elif not os.path.exists(folder) :
+        print("\n\tCreating directory '{:s}'".format(folder))
+        os.mkdir(folder)
+    return folder
+
+def output_file(folder,what):
+    folder = output_folder(folder)
+    return "{:s}/{:s}".format(folder,what)
+
+def save2xyz(what,file,atoms,comment=""):
+
+    if len(what.shape) == 1 : # just one configuration, NOT correctly formatted
+
+        what = what.reshape((-1,3))
+        return save2xyz(what,file,atoms)
+    
+    elif len(what.shape) == 2 : 
+
+        if what.shape[1] != 3 : # many configurations
+            what = what.reshape((len(what),-1,3))
+            return save2xyz(what,file,atoms)
+        
+        else : # just one configurations, correctly formatted
+            return save2xyz(np.asarray([what]),file,atoms)
+
+    elif len(what.shape) == 3 :
+
+        Na = what.shape[1]
+        if what.shape[2] != 3 :
+            raise ValueError("wrong shape")
+        
+        with open(file,"w") as f :
+            
+            for i in range(what.shape[0]):
+                pos = what[i,:,:]
+                f.write(str(Na)+"\n")
+                f.write("# {:s}\n".format(comment))
+                for ii in range(Na):
+                    f.write("{:>2s} {:>20.12e} {:>20.12e} {:>20.12e}\n".format(atoms[ii],*pos[ii,:]))
+        return
+    
+
+def print_cell(cell,tab="\t\t"):
+    cell = cell.T
+    string = tab+"{:14s} {:1s} {:^10s} {:^10s} {:^10s}".format('','','x','y','z')
+    for i in range(3):
+        string += "\n"+tab+"{:14s} {:1d} : {:>10.6f} {:>10.6f} {:>10.6f}".format('lattice vector',i+1,cell[i,0],cell[i,1],cell[i,2])
+    return string

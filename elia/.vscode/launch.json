@@ -8,9 +8,10 @@
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
-            "program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/generate-thermal-state.py",
+            //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/generate-thermal-state.py",
             //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/sequence-parity-inversion.py",
             //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/project-on-vibrational-modes.py",
+            "program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/make-supercell.py",
             //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/ipi2csv.py",
             //"program":"/home/elia/Google-Drive/google-personal/miscellaneous/elia/shift-along-vibrational-modes.py",
             //"program": "/home/elia/Google-Drive/google-personal/miscellaneous/elia/IR.py",
@@ -22,7 +23,8 @@
             //"cwd":"/home/elia/Google-Drive/google-personal/works/test",
             //"cwd":"/home/elia/Google-Drive/google-personal/works/GLE-300K",
             //"cwd":"/home/elia/Google-Drive/google-personal/works/occupations-30",
-            "cwd":"/home/elia/Google-Drive/google-personal/works/displacement",
+            "cwd":"/home/elia/Google-Drive/google-personal/works/conv-pol",
+            //"cwd":"/home/elia/Google-Drive/google-personal/works/displacement",
             //"cwd":"/home/elia/Google-Drive/google-personal/works/test",
             "console": "integratedTerminal",
             "justMyCode": true,
@@ -31,7 +33,8 @@
             //"args":["-z","i-pi.bec.txt","-m","i-pi.phonons.mode"],
             //"args":"RESTART",
             //"args":["-c","true","-q","i-pi.positions_0.xyz","-v","i-pi.velocities_0.xyz","-r","start.xyz","-o","output","-m","vib","-p","output/energy.pdf","-pr","i-pi.properties.out"],//"-t","2500000"],
-            "args":["-q","start.xyz","-m","vib","-o","output","-T","300"],
+            //"args":["-q","start.xyz","-m","vib","-o","output","-T","300"],
+            "args":["-q","positions.xyz","-c","cell.txt","-o","output","-n","2,2,2"],
         }
     ]
 }
