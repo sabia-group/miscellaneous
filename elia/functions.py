@@ -12,6 +12,7 @@ import os
 import itertools
 import numpy as np
 import re
+from ipi.utils.units import unit_to_internal, unit_to_user
 
 # https://stackabuse.com/python-how-to-flatten-list-of-lists/
 def flatten_list(_2d_list):
@@ -58,7 +59,7 @@ def get_one_file_in_folder(folder,ext):
         raise ValueError("more than one '*{:s}' file found".format(ext))
     return files[0]
 
-def get_property_header(inputfile,N=1000):
+def get_property_header(inputfile,N=1000,search=True):
 
     names = [None]*N
     restart = False
@@ -85,13 +86,17 @@ def get_property_header(inputfile,N=1000):
                     lenght = b - a  + 1 
 
                 if icol < N :
-                    if lenght == 1 :
+                    if not search:
+                        if lenght == 1 :
+                            names[icol] = line
+                            icol += 1
+                        else :
+                            for i in range(lenght):
+                                names[icol] = line + "-" + str(i)
+                                icol += 1
+                    else :
                         names[icol] = line
                         icol += 1
-                    else :
-                        for i in range(lenght):
-                            names[icol] = line + "-" + str(i)
-                            icol += 1
                 else :
                     restart = True
                     icol += 1
@@ -236,3 +241,8 @@ def print_cell(cell,tab="\t\t"):
     for i in range(3):
         string += "\n"+tab+"{:14s} {:1d} : {:>10.6f} {:>10.6f} {:>10.6f}".format('lattice vector',i+1,cell[i,0],cell[i,1],cell[i,2])
     return string
+
+def convert(array,family,_from,_to):
+    factor  = unit_to_internal(family,_from,1)
+    factor *= unit_to_user(family,_to,1)
+    return array * factor

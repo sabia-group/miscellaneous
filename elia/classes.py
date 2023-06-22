@@ -1,4 +1,4 @@
-from functions import get_one_file_in_folder,getproperty,output_file
+from functions import get_one_file_in_folder,getproperty,output_file,get_property_header
 import os
 from ase import io #.io import read
 import numpy as np
@@ -29,7 +29,7 @@ class MicroStatePrivate:
 
 class MicroState:
 
-    def __init__(self,options,what):
+    def __init__(self,options,what=None,toread=None):
         
         attribute_names  = [ "relaxed", "positions", "displacement", "velocities" ]
         attribute_names += [ "eigvals", "dynmat", "eigvec", "modes", "ortho_modes", "masses" ]
@@ -38,8 +38,12 @@ class MicroState:
 
         for name in attribute_names:
             setattr(self, name, None)
-   
-        toread = list()
+
+        if what is None :
+            what = ""
+        if toread is None :
+            toread = list()
+
         if what == "proj-on-vib-modes" :
             toread += [ "relaxed",\
                         "masses",\
@@ -270,6 +274,10 @@ class MicroState:
             else :
                 self.Nmodes = len(eigvals)
             self.eigvals = eigvals
+            if np.any( self.eigvals < 0.0 ):
+                print("{:s}!**Warning**: some eigenvalues are negative, setting them to (nearly) zero".format(MicroStatePrivate.tab))
+                smallest_float = np.nextafter(0,1)
+                self.eigvals = np.asarray( [ smallest_float if i < 0.0 else i for i in self.eigvals ] )
             
         if "dynmat" in toread:
 
@@ -318,14 +326,14 @@ class MicroState:
     
             file = output_file(options.output,MicroStatePrivate.ofile["energy"])
             print("{:s}reading energy from file '{:s}'".format(MicroStatePrivate.tab,file))
-            self.energy = np.loadtxt(file).T
+            self.energy = np.loadtxt(file)
 
 
         if "A-amplitudes" in toread:
 
             file = output_file(options.output,MicroStatePrivate.ofile["A-amplitudes"])
             print("{:s}reading A-amplitudes from file '{:s}'".format(MicroStatePrivate.tab,file))
-            self.Aamplitudes = np.loadtxt(file).T
+            self.Aamplitudes = np.loadtxt(file)
             
             if self.energy is not None:
 
@@ -347,6 +355,18 @@ class MicroState:
                 self.time *= factor
                 self.units = "a.u."
 
+
+        if "properties" in toread:
+            if options.property is None:
+                raise ValueError("The file with the system (time-dependent) properties is not defined")
+            
+            header = get_property_header(options.property,search=True)
+            p,u = getproperty(options.property,header)
+            self.header  = get_property_header(options.property,search=False)
+            self.properties  = p
+            self.units = u
+            
+
         for name in attribute_names:
             if getattr(self, name) is None:
                 delattr(self, name)
@@ -362,6 +382,7 @@ class MicroState:
         # N = len(eigvals)
         # omega_inv = np.zeros((N,N))
         # np.fill_diagonal(omega_inv,1.0/np.sqrt(eigvals))
+        # return np.nan_to_num(MicroState.diag_matrix(eigvals,"-1/2") @ proj @ vel,0.0)
         return MicroState.diag_matrix(eigvals,"-1/2") @ proj @ vel
     
     @staticmethod
@@ -577,7 +598,7 @@ class MicroState:
         if file is None:
             file = output_file(folder,MicroStatePrivate.ofile[name])
         print("{:s}saving {:s} to file '{:s}'".format(MicroStatePrivate.tab,name,file))
-        np.savetxt(file,what.T, fmt=MicroStatePrivate.fmt)
+        np.savetxt(file,what, fmt=MicroStatePrivate.fmt)
         pass
 
     def save(self,folder,what):
@@ -598,7 +619,7 @@ class MicroState:
             # print("{:s}saving phases to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.phases.T, fmt=MicroStatePrivate.fmt)
 
-            MicroState.save2txt(self.Aamplitudes,name="A-amplitudes",folder=folder)
+            MicroState.save2txt(what=self.Aamplitudes,name="A-amplitudes",folder=folder)
             # file = output_file(folder,MicroStatePrivate.ofile["Aamp"])
             # print("{:s}saving A-amplitudes to file '{:s}'".format(MicroStatePrivate.tab,file))
             # np.savetxt(file,self.Aamplitudes.T,fmt=MicroStatePrivate.fmt)
@@ -638,8 +659,8 @@ class MicroState:
         ax.set_xlabel("time (ps)")
         ax.set_xlim(min(time),max(time))
         ylim = ax.get_ylim()
-        ax.set_ylim(0,ylim[1])
-        # ax.set_yscale("log")
+        #ax.set_ylim(0,ylim[1])
+        ax.set_yscale("log")
 
         plt.grid()
         plt.tight_layout()
@@ -652,18 +673,18 @@ class MicroState:
         plt.clf()
 
         mean = np.mean(normalized_occupations,axis=0)
-        std = np.mean(normalized_occupations,axis=0)
+        std = np.std(normalized_occupations,axis=0)
         if len(mean) != Ndof or len(std) != Ndof:
             raise ValueError("wrong array size for barplot")
 
         fig, ax = plt.subplots(figsize=(10,6))
-        w = np.sqrt(self.eigvals)
+        w = np.sqrt(self.eigvals) * unit_to_user("frequency","thz",1)
         # ax.scatter(x=w,y=mean,color="navy")
         ax.errorbar(x=w,y=mean,yerr=std,color="red",ecolor="navy",fmt="o")
 
         # plt.title('LiNbO$_3$ (NVT@$20K$,$\\Delta t = 1fs$,T$=20-50ps$,$\\tau=10fs$)')
         ax.set_ylabel("$A^2_s\\omega^2_s / \\left( 2 N \\right)$ with $N=E_{harm}\\left(t\\right)$")
-        ax.set_xlabel("$\\omega$ (a.u.)")
+        ax.set_xlabel("$\\omega$ (THz)")
         
         #ax.set_xlim(min(self.time),max(self.time))
         xlim = ax.get_xlim()
@@ -679,12 +700,12 @@ class MicroState:
         plt.savefig(file)
 
         import pandas as pd
-        df = pd.DataFrame(columns=["w","mean","std"])
-        df["w"] = w
+        df = pd.DataFrame()
+        df["w [THz]"] = w
         df["mean"] = mean
         df["std"] = std
         file = file = output_file(options.output,MicroStatePrivate.ofile["violin"])
-        df.to_csv(file,index=False)
+        df.to_csv(file,index=False,float_format="%22.12f")
 
         pass
 
@@ -770,3 +791,10 @@ class MicroState:
                 pickle.dump(s, f)
 
         return r,v
+    
+    def get_properties_as_dataframe(self):
+
+        import pandas as pd
+        p = pd.DataFrame(data=self.properties,columns=self.header)
+        return p
+    

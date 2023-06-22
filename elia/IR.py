@@ -8,6 +8,7 @@
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 def prepare_parser():
     """set up the script input parameters"""
@@ -30,10 +31,10 @@ def prepare_parser():
         "-p", "--plot", action="store", type=str,
         help="output file of the plot of the IR intensities", default=None
     ) 
-    parser.add_argument(
-        "-n", "--number", action="store", type=int,
-        help="index of the Born Effective Charges to be plotted", default=0
-    ) 
+    # parser.add_argument(
+    #     "-n", "--number", action="store", type=int,
+    #     help="index of the Born Effective Charges to be plotted", default=0
+    # ) 
     parser.add_argument(
         "-w", "--eigenvalues", action="store", type=str,
         help="input file with the eigenvalues computed by i-PI", default=None
@@ -54,35 +55,35 @@ def read_input(options):
     file = options.born_charges
     if not os.path.exists(file):
         raise ValueError("'{:s}' does not exists".format(file))
-    data.Z = np.loadtxt(file)
+    data.Z = np.loadtxt(file).flatten()
 
-    # check all the BEC have the same size
-    lenght = [ len(i) for i in data.Z ]
-    result = lenght.count(lenght[0]) == len(lenght)
-    if not result :
-        raise ValueError("Born Effective Charges should have the same size for all the steps")
+    # # check all the BEC have the same size
+    # lenght = [ len(i) for i in data.Z ]
+    # result = lenght.count(lenght[0]) == len(lenght)
+    # if not result :
+    #     raise ValueError("Born Effective Charges should have the same size for all the steps")
     
     # check that the BEC lenght is a multiple of 9
-    N = len(data.Z[0])
-    if N % 9 != 0 :
-        raise ValueError("Born Effective Charges with wrong size")
+    # N = len(data.Z[0])
+    # if N % 9 != 0 :
+    #     raise ValueError("Born Effective Charges with wrong size")
     
-    Na = int( N / 9 ) # number of atoms
-    Nmd = len(data.Z) # number of MD steps
-    temp = np.full((Nmd,3,Na*3),np.nan)
-    # MD steps
-    for i in range(Nmd): 
-        # polarization components
-        for j in range(3): 
-            temp[i,j,:] = data.Z[i,j::3]
-    data.Z = temp
+    # Na = int( N / 9 ) # number of atoms
+    # Nmd = len(data.Z) # number of MD steps
+    # temp = np.full((Nmd,3,Na*3),np.nan)
+    # # MD steps
+    # for i in range(Nmd): 
+    #     # polarization components
+    #     for j in range(3): 
+    #         temp[i,j,:] = data.Z[i,j::3]
+    # data.Z = temp
 
     file = options.modes
     if not os.path.exists(file):
         raise ValueError("'{:s}' does not exists".format(file))
     data.modes = np.loadtxt(file)
 
-    if len(data.modes) != data.Z.shape[2]:
+    if 3 * data.modes.shape[0]  != len(data.Z):
         raise ValueError("Vibrational modes and Born Effective Charges shapes do not match")
     
     file = options.eigenvalues
@@ -99,20 +100,22 @@ def compute(data):
     class Results: pass
     results = Results()
 
+    data.Z = data.Z.reshape((-1,3))
+
     # number of Molecular Dynamics steps
-    Nmd = len(data.Z)
+    #Nmd = len(data.Z)
     # number of vibrational modes
-    Nmodes = len(data.modes)
+    #Nmodes = len(data.modes)
 
     # IR Raman intensities (for each mode and MD step)
-    results.IR = np.full((Nmd,Nmodes),np.nan)
+    #results.IR = np.full((Nmd,Nmodes),np.nan)
 
     # derivative of the polarization w.r.t. normal/vibrational modes
-    results.dP_dQ = np.full((Nmd,3,Nmodes),np.nan)
+    #results.dP_dQ = np.full((Nmd,3,Nmodes),np.nan)
 
     # derivative of the cartesian coordinates w.r.t. normal modes
     dRdQ = data.modes #np.linalg.inv(data.modes)
-    results.dP_dQ = data.Z @ dRdQ 
+    results.dP_dQ = (data.Z.T @ dRdQ).T
 
     # IR Raman activities
     # row: MD step
@@ -141,16 +144,26 @@ def main():
 
     # print IR intesity to file
     print("\tSaving IR intesities to file '{:s}'".format(options.output))
-    np.savetxt(options.output,results.IR)
+    df = pd.DataFrame(columns=["w [THz]","IR"])
+    df["w [THz]"] = data.w / 0.00015198298
+    df["IR"] = results.IR
+    df["w [THz]"] = df["w [THz]"].fillna(0)
+    #np.savetxt(options.output,results.IR)
+    df.to_csv(options.output,index=False,float_format="%22.12f")
     
     # produce plot of the IR intesities
     if options.plot is not None :
-        print("\tPlotting IR {:d}-th intesity to file '{:s}'".format(options.number,options.plot))
+        print("\tPlotting IR intesity to file '{:s}'".format(options.plot))
         
-        fig, ax = plt.subplots(figsize=(10,6))
+        fig, ax = plt.subplots(figsize=(12,6))
 
         x = data.w / 1.5198298e-4
-        y = results.IR[options.number,:]
+        y = results.IR#[options.number,:]
+
+        ii = [ not np.isnan(i) for i in x ]
+        x = x[ii]
+        y = y[ii]
+
         ax.bar(x,y,color="blue",width=2e-1) #label=str(n)
         ax.yaxis.grid(True)
         ax.xaxis.grid(True)
