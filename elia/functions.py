@@ -242,7 +242,7 @@ def print_cell(cell,tab="\t\t"):
         string += "\n"+tab+"{:14s} {:1d} : {:>10.6f} {:>10.6f} {:>10.6f}".format('lattice vector',i+1,cell[i,0],cell[i,1],cell[i,2])
     return string
 
-def convert(array,family,_from,_to):
+def convert(what,family,_from,_to):
     factor  = unit_to_internal(family,_from,1)
     factor *= unit_to_user(family,_to,1)
-    return array * factor
+    return what * factor
