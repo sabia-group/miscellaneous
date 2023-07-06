@@ -1,6 +1,8 @@
 from functions import get_one_file_in_folder,getproperty,output_file,get_property_header
+from functions import convert, Dict2Obj, get_attributes, merge_attributes, read_comments_xyz
 import os
 from ase import io #.io import read
+from ase import Atoms
 import numpy as np
 import numpy.linalg as linalg
 norm = linalg.norm
@@ -8,7 +10,16 @@ import matplotlib.pyplot as plt
 from ipi.utils.units import unit_to_internal, unit_to_user
 import pickle
 import numpy.random as rand
-# from copy import copy
+import pandas as pd
+from reloading import reloading
+import re
+import ipi.utils.mathtools as mt
+from copy import deepcopy
+
+deg2rad = np.pi / 180.0
+abcABC = re.compile(r"CELL[\(\[\{]abcABC[\)\]\}]: ([-+0-9\.Ee ]*)\s*")
+
+# reloading: https://towardsdatascience.com/introducing-reloading-never-re-run-your-python-code-again-to-print-more-details-374bee33473d
 
 class MicroStatePrivate:
 
@@ -26,23 +37,62 @@ class MicroStatePrivate:
              "B-amplitudes":"B-amplitudes.txt",\
              "violin":"violin.csv"}
     
+    smallest_float = np.nextafter(0,1)
+    
 
 class MicroState:
 
-    def __init__(self,options,what=None,toread=None):
+    #@reloading
+    def add(self,*argv,**argc):
+        try :
+            print("Adding new attributes ...\n")
+            # # empty object
+            # temp = MicroState()
+            # # give it the attributes
+            # temp = merge_attributes(temp,self)
+            # # read new attrbitues
+            temp = deepcopy(self)
+            MicroState.__init__(temp,*argv,**argc)
+        except:
+            raise ValueError("Error in __int__")
         
-        attribute_names  = [ "relaxed", "positions", "displacement", "velocities" ]
+        print("Merging new attributes ...")
+        temp = merge_attributes(self,temp)
+        print("Merging completed :)\n")
+        #return temp
+        
+    #@reloading
+    def __init__(self,options=None,what=None,toread=None):
+
+        print("Initializing object of type 'MicroState' ...")
+
+        if options is None :
+            options= {}
+
+        if type(options) == dict :
+            options = Dict2Obj(options)
+        
+        attribute_names  = [ "relaxed", "positions", "displacement", "velocities", "cells", "types" ]
         attribute_names += [ "eigvals", "dynmat", "eigvec", "modes", "ortho_modes", "masses" ]
         attribute_names += [ "Nmodes", "Nconf" ]
-        attribute_names += [ "energy", "Aamplitudes", "Bamplitudes", "time" ]
+        attribute_names += [ "energy", "Aamplitudes", "Bamplitudes", "properties" ]
 
         for name in attribute_names:
-            setattr(self, name, None)
+            if not hasattr(self,name):
+                setattr(self, name, None)
 
         if what is None :
             what = ""
         if toread is None :
             toread = list()
+
+        if what == "vib":
+            toread += [ "masses",\
+                        "ortho_modes",\
+                        "proj",\
+                        "eigvec",\
+                        "hess",\
+                        "eigvals"]            
 
         if what == "proj-on-vib-modes" :
             toread += [ "relaxed",\
@@ -57,13 +107,13 @@ class MicroState:
                         "hess",\
                         "eigvals",\
                         #"dynmat",\
-                        "time"]
+                        "properties"]
             
         if what == "plot-vib-modes-energy" :
             toread += [ "eigvals",\
                         "energy",\
                         "A-amplitudes",\
-                        "time"]
+                        "properties"]
             
         if what == "generate-thermal-state":
             toread += [ "relaxed",\
@@ -74,13 +124,16 @@ class MicroState:
                         "hess",\
                         "eigvals",\
                         "atoms"]
+            
+        print("\nProperties to be read:")
+        for k in toread:
+            print("{:s}".format(MicroStatePrivate.tab),k)
 
-
-        ##################
-        #                # 
-        # start reading  #
-        #                #
-        ##################
+        ###################
+        #                 # 
+        #  start reading  #
+        #                 #
+        ###################
 
         if "relaxed" in toread:
             ###
@@ -127,6 +180,7 @@ class MicroState:
 
             print("{:s}reading positions from file '{:s}'".format(MicroStatePrivate.tab,options.positions))
             positions = io.read(options.positions,index=":")
+            tmp = positions[0]
             atoms = tmp.get_chemical_symbols()
             Nconf = len(positions) 
 
@@ -141,6 +195,24 @@ class MicroState:
 
             self.positions = np.asarray(positions)
             self.Nconf = Nconf
+
+        if "types" in toread:
+
+            print("{:s}reading atomic types from file '{:s}'".format(MicroStatePrivate.tab,options.types))
+            positions = io.read(options.positions,index=":")
+            self.types = [ system.get_chemical_symbols() for system in positions ]
+
+
+        if "cells" in toread :
+            print("{:s}reading cells (for each configuration) from file '{:s}'".format(MicroStatePrivate.tab,options.cells))
+
+            comments = read_comments_xyz(options.cells)
+            cells = [ abcABC.search(comment) for comment in comments ]
+            self.cell = np.zeros((len(cells),3,3))
+            for n,cell in enumerate(cells):
+                a, b, c = [float(x) for x in cell.group(1).split()[:3]]
+                alpha, beta, gamma = [float(x) * deg2rad for x in cell.group(1).split()[3:6]]
+                self.cell[n] = mt.abc2h(a, b, c, alpha, beta, gamma)
 
             
         if "atoms" in toread:
@@ -158,16 +230,23 @@ class MicroState:
 
         if "velocities" in toread:
 
-            print("{:s}reading velocities from file '{:s}'".format(MicroStatePrivate.tab,options.velocities))
-            velocities = io.read(options.velocities,index=":")
-            Nvel = len(velocities)
-            print("{:s}read {:d} velocities".format(MicroStatePrivate.tab,Nvel))
-            if self.Nconf is not None :
-                if Nvel != self.Nconf :
-                    raise ValueError("number of velocities and positions configuration are different")
-            for n in range(Nvel):
-                velocities[n] = velocities[n].positions.flatten()
-            self.velocities = np.asarray(velocities)
+            if options.velocities is None:
+                print("{:s}setting velocities to zero".format(MicroStatePrivate.tab))
+                if self.positions is None :
+                    raise ValueError("'positions' not defined")
+                self.velocities = np.zeros(self.positions.shape)
+
+            else :
+                print("{:s}reading velocities from file '{:s}'".format(MicroStatePrivate.tab,options.velocities))
+                velocities = io.read(options.velocities,index=":")
+                Nvel = len(velocities)
+                print("{:s}read {:d} velocities".format(MicroStatePrivate.tab,Nvel))
+                if self.Nconf is not None :
+                    if Nvel != self.Nconf :
+                        raise ValueError("number of velocities and positions configuration are different")
+                for n in range(Nvel):
+                    velocities[n] = velocities[n].positions.flatten()
+                self.velocities = np.asarray(velocities)
 
 
         if "ortho_modes" in toread:   
@@ -276,8 +355,7 @@ class MicroState:
             self.eigvals = eigvals
             if np.any( self.eigvals < 0.0 ):
                 print("{:s}!**Warning**: some eigenvalues are negative, setting them to (nearly) zero".format(MicroStatePrivate.tab))
-                smallest_float = np.nextafter(0,1)
-                self.eigvals = np.asarray( [ smallest_float if i < 0.0 else i for i in self.eigvals ] )
+                self.eigvals = np.asarray( [ MicroStatePrivate.smallest_float if i < 0.0 else i for i in self.eigvals ] )
             
         if "dynmat" in toread:
 
@@ -340,20 +418,20 @@ class MicroState:
                 if np.any(self.Aamplitudes.shape != self.energy.shape):
                     raise ValueError("energy and A-amplitudes matrix size do not match")
             
-        if "time" in toread:
-            if options.property is None:
-                raise ValueError("The file with the system (time-dependent) properties is not defined")
+        # if "time" in toread:
+        #     if options.property is None:
+        #         raise ValueError("The file with the system (time-dependent) properties is not defined")
             
-            t,u = getproperty(options.property,["time"])
-            self.time  = t["time"]
-            self.units = u["time"]
+        #     t,u = getproperty(options.property,["time"])
+        #     self.time  = t["time"]
+        #     self.units = u["time"]
 
-            if u["time"] not in ["a.u.","atomic_unit"]:
-                print("{:s}'time' is not in 'atomic units' but in '{:s}'".format(MicroStatePrivate.tab,u["time"]))
-                factor = unit_to_internal("time","femtosecond",1)
-                print("{:s}converting 'time' to 'atomic units' by multiplication for {:>14.10e}".format(MicroStatePrivate.tab,factor))
-                self.time *= factor
-                self.units = "a.u."
+        #     if u["time"] not in ["a.u.","atomic_unit"]:
+        #         print("{:s}'time' is not in 'atomic units' but in '{:s}'".format(MicroStatePrivate.tab,u["time"]))
+        #         factor = unit_to_internal("time","femtosecond",1)
+        #         print("{:s}converting 'time' to 'atomic units' by multiplication for {:>14.10e}".format(MicroStatePrivate.tab,factor))
+        #         self.time *= factor
+        #         self.units = "a.u."
 
 
         if "properties" in toread:
@@ -371,6 +449,7 @@ class MicroState:
             if getattr(self, name) is None:
                 delattr(self, name)
 
+        print("\nInitialization completed :)") 
         pass
 
     @staticmethod
@@ -445,8 +524,11 @@ class MicroState:
         if len(phases.shape) == 1 :
             phases = phases.reshape(1,-1)
 
-        time = self.time if hasattr(self,"time") and self.time is not None else np.zeros(len(Aamp))
-
+        if "time" in self.properties and self.properties is not None:
+            time = convert(self.properties["time"],"time",_from=self.units["time"],_to="atomic_unit")
+        else :
+            time = np.zeros(len(Aamp))
+            
         phi = np.outer(np.sqrt( self.eigvals) , time).T
         c = + Aamp * np.cos( phi + phases )
         s = - Aamp * np.sin( phi + phases)
@@ -471,6 +553,7 @@ class MicroState:
                  "velocities":v,\
                  "positions":positions }
 
+    # @reloading
     def project_on_vibrational_modes(self,deltaR=None,v=None,inplace=True):
 
         if deltaR is None :
@@ -508,6 +591,7 @@ class MicroState:
         proj_vel   = MicroState.project_velocities  (v.T,   self.proj, self.eigvals).T
         A2 = ( np.square(proj_displ) + np.square(proj_vel) )
         energy = ( self.eigvals * A2 / 2.0 ) # w^2 A^2 / 2
+        energy [ energy == np.inf ] = np.nan
         normalized_energy = ( ( self.Nmodes - 3 ) * energy.T / energy.sum(axis=1).T ).T
         Aamplitudes = np.sqrt(A2)
 
@@ -531,7 +615,10 @@ class MicroState:
                                     M=self.masses,\
                                     E=self.eigvec)
         
-        time = self.time if hasattr(self,"time") and self.time is not None else np.zeros(len(proj_vel))
+        if "time" in self.properties and self.properties is not None:
+            time = convert(self.properties["time"],"time",_from=self.units["time"],_to="atomic_unit")
+        else :
+            time = np.zeros(len(Bamplitudes))
         phases = np.arctan2(-proj_vel,proj_displ) - np.outer(np.sqrt( self.eigvals) , time).T
 
         out = {"energy": energy,\
@@ -547,6 +634,7 @@ class MicroState:
             self.phases = phases
             self.Aamplitudes = Aamplitudes
             self.Bamplitudes = Bamplitudes
+            self.normalized_energy = normalized_energy
 
         if MicroStatePrivate.debug : test = self.project_on_cartesian_coordinates(inplace=False)
         if MicroStatePrivate.debug : print(norm(test["positions"] - self.positions))
@@ -601,7 +689,7 @@ class MicroState:
         np.savetxt(file,what, fmt=MicroStatePrivate.fmt)
         pass
 
-    def save(self,folder,what):
+    def savefiles(self,folder,what):
 
         if what == "proj-on-vib-modes":
             MicroState.save2txt(what=self.energy,name="energy",folder=folder)
@@ -633,13 +721,18 @@ class MicroState:
 
     def plot(self,options):
 
+        if "time" in self.properties and self.properties is not None:
+            time = convert(self.properties["time"],"time",_from=self.units["time"],_to="atomic_unit")
+        else :
+            time = np.zeros(len(self.Aamplitudes))
+
         if options.t_min > 0 :            
             print("\tSkipping the {:d} {:s}".format(options.t_min,self.units))
             i = np.where( self.time >= options.t_min )[0][0]
             print("\tthen skipping the first {:d} MD steps".format(i))
             self.Aamplitudes = self.Aamplitudes[i:,:]
             self.energy = self.energy[i:,:] 
-            self.time   = self.time[i:]
+            time   = time[i:]
 
         Ndof = self.Aamplitudes.shape[1]
         normalization = self.energy.sum(axis=1) / ( Ndof - 3 )
@@ -651,7 +744,7 @@ class MicroState:
         fig, ax = plt.subplots(figsize=(10,6))
 
         factor = unit_to_user("time","picosecond",1)
-        time = self.time*factor
+        time = time*factor
         ax.plot(time,normalized_occupations)
 
         # plt.title('LiNbO$_3$ (NVT@$20K$,$\\Delta t = 1fs$,T$=20-50ps$,$\\tau=10fs$)')
@@ -699,7 +792,6 @@ class MicroState:
         # plt.show()
         plt.savefig(file)
 
-        import pandas as pd
         df = pd.DataFrame()
         df["w [THz]"] = w
         df["mean"] = mean
@@ -798,3 +890,89 @@ class MicroState:
         p = pd.DataFrame(data=self.properties,columns=self.header)
         return p
     
+    def show(self):
+        '''show the attributes of the class'''
+        print("Attributes of the object:")
+        attribs = get_attributes(self)
+        for a in attribs:
+            print("{:s}".format(MicroStatePrivate.tab),a)
+
+    def show_properties(self):
+        '''show the properties of the class'''
+        print("Properties of the object:")
+        keys = list(self.properties.keys())
+        size = [None]*len(keys)
+        for n,k in enumerate(keys):
+            tmp = list(self.properties[k].shape[1:])
+            if len(tmp) == 0 :
+                size[n] = 1
+            elif len(tmp) == 1:
+                size[n] = tmp[0]
+            else :
+                size[n] = tmp
+        df = pd.DataFrame(columns=["name","unit","shape"])
+        df["name"] = keys
+        df["unit"] = [ self.units[k] for k in keys ]
+        df["shape"] = size
+        return df
+
+    def convert_property(self,what,unit,family,inplace=True):
+        # family = get_family(name)
+        factor = convert(1,family,_from=self.units[what],_to=unit)
+        if inplace :
+            self.properties[what] = self.properties[what] * factor
+            self.units[what] = unit
+            return self.properties[what]
+        else :
+            return self.properties[what] * factor
+
+    # @reloading
+    def vibrational_analysis_summary(self):
+        """ summary of the vibrational analysis"""
+        print("Summary of the vibrational analysist:")
+        cols = [ "eigvals [a.u.]" , "w [a.u.]", "w [THz]", "w [cm^-1]", "T [a.u.]", "T [ps]","E [a.u.]", "n [a.u.]"]
+        df = pd.DataFrame(columns=cols)
+        eigvals = self.eigvals.copy()
+        eigvals [ eigvals == MicroStatePrivate.smallest_float ] = np.nan
+        df["eigvals [a.u.]"] = eigvals
+        df["w [a.u.]"]  = [ np.sqrt(i) if i > 0. else None for i in eigvals ]
+        df["w [THz]"]   = convert(df["w [a.u.]"],"frequency",_from="atomic_unit",_to="thz")
+        df["w [cm^-1]"] = convert(df["w [a.u.]"],"frequency",_from="atomic_unit",_to="inversecm")
+        df["T [a.u.]"]  = 2*np.pi / df["w [a.u.]"]
+        df["T [ps]"]    = convert(df["T [a.u.]"],"time",_from="atomic_unit",_to="picosecond")
+        df["E [a.u.]"]  = self.energy.mean(axis=0)
+        df["n [a.u.]"]  = self.occupations.mean(axis=0)
+        return df
+
+    # @reloading
+    def to_ase(self,inplace=False,recompute=False):
+
+        out = None
+        if recompute or not hasattr(self,"ase"):
+            out = [None]*self.Nconf
+            N = np.arange(len(out))
+            for n,t,p,c in zip(N,self.types,self.positions,self.cell):
+                out[n] = Atoms(symbols=t, positions=p.reshape(-1,3), cell=c.T, pbc=True)
+
+        if inplace and out is not None:
+            self.ase = out
+        elif hasattr(self,"ase"):
+            out = self.ase
+
+        return out
+
+    # @reloading
+    @staticmethod
+    def save(obj,file):
+        print("Saving object to file '{:s}'".format(file))
+        with open(file, 'wb') as f:
+            pickle.dump(obj,f)
+        pass
+
+    # @reloading
+    @staticmethod
+    def load(file):
+        print("Loading object from file '{:s}'".format(file))
+        with open(file, 'rb') as f:
+            obj = pickle.load(f)
+        return obj

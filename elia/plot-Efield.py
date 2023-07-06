@@ -63,7 +63,7 @@ def Ef_plot(Ef,data,options):
 
     t,E,En,f= compute(Ef,data,options)
 
-    fig, ax = plt.subplots(figsize=(12,6))
+    fig, ax = plt.subplots(figsize=(10,6))
 
     ax.plot(t,f,label="$f_{env} \\times E_{amp}$",color="black")
     ax.plot(t,En,label="$|E|$",color="gray",alpha=0.5)

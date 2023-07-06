@@ -147,7 +147,7 @@ def main():
         print("\n\tComputing occupations")
         data.project_on_vibrational_modes()
 
-        data.save(folder=options.output,\
+        data.savefiles(folder=options.output,\
                   what="proj-on-vib-modes")    
 
     ###

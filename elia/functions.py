@@ -12,6 +12,7 @@ import os
 import itertools
 import numpy as np
 import re
+from ipi.engine.properties import Properties
 from ipi.utils.units import unit_to_internal, unit_to_user
 
 # https://stackabuse.com/python-how-to-flatten-list-of-lists/
@@ -107,7 +108,7 @@ def get_property_header(inputfile,N=1000,search=True):
     else :
         return names[:icol]
 
-def getproperty(inputfile, propertyname,data=None,skip="0"):
+def getproperty(inputfile, propertyname,data=None,skip="0",show=False):
 
     def check(p,l):
         if not l.find(p) :
@@ -129,7 +130,7 @@ def getproperty(inputfile, propertyname,data=None,skip="0"):
             out[p],units[p] = getproperty(inputfile,p,data,skip=skip)
         return out,units
     
-    print("\tsearching for '{:s}'".format(propertyname))
+    if show : print("\tsearching for '{:s}'".format(propertyname))
 
     skip = int(skip)
 
@@ -176,6 +177,7 @@ def getproperty(inputfile, propertyname,data=None,skip="0"):
                     print("Could not find " + propertyname + " in file " + inputfile)
                     raise EOFError
                 else :
+                    if show : print("\tfound '{:s}'".format(propertyname))
                     return np.asarray(output),unit
 
             except EOFError:
@@ -246,3 +248,67 @@ def convert(what,family,_from,_to):
     factor  = unit_to_internal(family,_from,1)
     factor *= unit_to_user(family,_to,1)
     return what * factor
+
+# def get_family(name):
+#     return Properties.property_dict[name]["dimension"]
+
+# https://www.blog.pythonlibrary.org/2014/02/14/python-101-how-to-change-a-dict-into-a-class/
+class Dict2Obj(object):
+    """
+    Turns a dictionary into a class
+    """
+    #----------------------------------------------------------------------
+    def __init__(self, dictionary):
+        """Constructor"""
+        for key in dictionary:
+            setattr(self, key, dictionary[key])
+
+def get_attributes(obj):
+    return [i for i in obj.__dict__.keys() if i[:1] != '_']
+
+def merge_attributes(A,B):
+    attribs = get_attributes(B)
+    for a in attribs:
+        setattr(A, a, getattr(B, a))
+    return A
+
+def read_comments_xyz(file,Nmax=1000000):
+
+    from ase import io
+    first = io.read(file)
+    Natoms = len(first)
+
+    okay = 1
+    result = [None]*Nmax
+    restart = False
+    i = 0
+    k = 0 
+
+    with open(file, "r+") as fp:
+        # access each line
+        line = fp.readline()
+
+        # # skip lines
+        # for n in range(skip):
+        #     line = fp.readline()
+        #     i += 1
+        #     if i == okay:
+        #         okay += Natoms+2
+
+        while line:
+            if i == okay:
+                result[k] = line
+                okay += Natoms+2
+                k += 1
+            
+            if k >= Nmax:
+                restart = True
+                break
+                
+            line = fp.readline()
+            i += 1
+    
+    if restart :
+        return read_comments_xyz(file,Nmax*2)
+
+    return result[:k]
