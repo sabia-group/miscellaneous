@@ -16,6 +16,9 @@ import re
 import ipi.utils.mathtools as mt
 from copy import deepcopy
 
+# To Do:
+# - move all the attributes (positions, velocitiees, etc) to proeprties or anyway treat all the attributes in a homogeneous way
+
 deg2rad = np.pi / 180.0
 abcABC = re.compile(r"CELL[\(\[\{]abcABC[\)\]\}]: ([-+0-9\.Ee ]*)\s*")
 
@@ -86,6 +89,9 @@ class MicroState:
         if toread is None :
             toread = list()
 
+        for k in get_attributes(options):
+            toread.append(k)
+
         if what == "vib":
             toread += [ "masses",\
                         "ortho_modes",\
@@ -111,6 +117,7 @@ class MicroState:
             
         if what == "plot-vib-modes-energy" :
             toread += [ "eigvals",\
+                        "eigvec",\
                         "energy",\
                         "A-amplitudes",\
                         "properties"]
@@ -199,7 +206,9 @@ class MicroState:
         if "types" in toread:
 
             print("{:s}reading atomic types from file '{:s}'".format(MicroStatePrivate.tab,options.types))
-            positions = io.read(options.positions,index=":")
+            if not hasattr(options,"types"):
+                options.types = options.positions
+            positions = io.read(options.types,index=":")
             self.types = [ system.get_chemical_symbols() for system in positions ]
 
 
@@ -419,10 +428,10 @@ class MicroState:
                     raise ValueError("energy and A-amplitudes matrix size do not match")
             
         # if "time" in toread:
-        #     if options.property is None:
+        #     if options.properties is None:
         #         raise ValueError("The file with the system (time-dependent) properties is not defined")
             
-        #     t,u = getproperty(options.property,["time"])
+        #     t,u = getproperty(options.properties,["time"])
         #     self.time  = t["time"]
         #     self.units = u["time"]
 
@@ -435,12 +444,12 @@ class MicroState:
 
 
         if "properties" in toread:
-            if options.property is None:
+            if options.properties is None:
                 raise ValueError("The file with the system (time-dependent) properties is not defined")
             
-            header = get_property_header(options.property,search=True)
-            p,u = getproperty(options.property,header)
-            self.header  = get_property_header(options.property,search=False)
+            header = get_property_header(options.properties,search=True)
+            p,u = getproperty(options.properties,header)
+            self.header  = get_property_header(options.properties,search=False)
             self.properties  = p
             self.units = u
             
@@ -503,14 +512,46 @@ class MicroState:
             B : B-amplitudes
         """
         
-        # print("A shape : ",A.shape)
-        # print("N shape : ",N.shape)
-        # print("M shape : ",M.shape)
-        # print("E shape : ",E.shape)
+        if MicroStatePrivate.debug: print("A shape : ",A.shape)
+        if MicroStatePrivate.debug: print("N shape : ",N.shape)
+        if MicroStatePrivate.debug: print("M shape : ",M.shape)
+        if MicroStatePrivate.debug: print("E shape : ",E.shape)
 
         B = np.diag( np.linalg.inv(N) @ MicroState.diag_matrix(M,"-1/2") @ E ) * A
-        # print("B shape : ",B.shape)
+        if MicroStatePrivate.debug: print("B shape : ",B.shape)
+
         return B
+    
+    
+    def B2A(self,B,N=None,M=None,E=None):
+        """
+        purpose:
+            convert the B-amplitude [length] into A-amplitudes [length x mass^{-1/2}]
+
+        input :
+            B : B-amplitudes
+            N : normal modes (normalized)
+            M : masses
+            E : eigevectors (of the dynamical matrix)
+
+        output:
+            A : A-amplitudes
+        """
+        
+        if N is None : N = self.ortho_modes
+        if M is None : M = self.masses
+        if E is None : E = self.eigvec
+        
+        if MicroStatePrivate.debug: print("B shape : ",B.shape)
+        if MicroStatePrivate.debug: print("N shape : ",N.shape)
+        if MicroStatePrivate.debug: print("M shape : ",M.shape)
+        if MicroStatePrivate.debug: print("E shape : ",E.shape)
+
+        A = E.T @ MicroState.diag_matrix(M,"1/2") @ N @ B
+        if MicroStatePrivate.debug: print("A shape : ",A.shape)
+        
+        return A
+
 
     def project_on_cartesian_coordinates(self,Aamp=None,phases=None,inplace=True):
         
@@ -524,7 +565,7 @@ class MicroState:
         if len(phases.shape) == 1 :
             phases = phases.reshape(1,-1)
 
-        if "time" in self.properties and self.properties is not None:
+        if hasattr(self,"properties") and "time" in self.properties :
             time = convert(self.properties["time"],"time",_from=self.units["time"],_to="atomic_unit")
         else :
             time = np.zeros(len(Aamp))
@@ -674,10 +715,11 @@ class MicroState:
                 
                 for i in range(what.shape[0]):
                     pos = what[i,:,:]
+                    _atoms = atoms[i] if type(atoms[0]) != str else atoms
                     f.write(str(Na)+"\n")
                     f.write("# configuration {:d}\n".format(i))
                     for ii in range(Na):
-                        f.write("{:>2s} {:>20.12e} {:>20.12e} {:>20.12e}\n".format(atoms[ii],*pos[ii,:]))
+                        f.write("{:>2s} {:>20.12e} {:>20.12e} {:>20.12e}\n".format(_atoms[ii],*pos[ii,:]))
             return
 
 
@@ -812,6 +854,30 @@ class MicroState:
             return list(self.relaxed.shape)
         else :
             return list(len(self.relaxed)/3,3)
+        
+    #@reloading
+    def displace_along_normal_mode(self,amplitudes:dict,unit="atomic_unit"):
+
+        
+        # convert to amplitudes into atomic_unit
+        for k in amplitudes.keys():
+            amplitudes[k] *= unit_to_internal("length",unit,1)
+
+        # convert from dict to np.ndarray
+        temp = np.zeros(self.Nmodes)
+        for k in amplitudes.keys():
+            temp[k] = amplitudes[k] 
+        amplitudes = temp
+        
+        phases = np.zeros(self.Nmodes)
+
+        Aamp = self.B2A(amplitudes)
+
+        out = self.project_on_cartesian_coordinates(Aamp=Aamp,\
+                                                    phases=phases,\
+                                                    inplace=False)
+        
+        return out["positions"].reshape((-1,3))
     
     def generate_thermal_state(self,T,randomfile,N=1,save=True,read=True,unit="kelvin"):
 
@@ -925,13 +991,75 @@ class MicroState:
             return self.properties[what]
         else :
             return self.properties[what] * factor
+        
+    def remove_data(self,time_end,time_start=0,unit="atomic_unit"):
+
+        # convert time into internal units
+        factor = convert(1,"time",_from=unit,_to=self.units["time"])
+        time_end   *= factor
+        time_start *= factor
+
+        time = self.properties["time"]
+        index = np.logical_and(time >= time_start , time < time_end)
+        new = deepcopy(self)
+
+        for k in self.properties.keys():
+            new.properties[k] = self.properties[k][index]
+
+        other = ["positions","velocities","displacements"]
+        for k in other:
+            if hasattr(self,k):
+                new_attr = getattr(self,k)[index]
+                setattr(new,k,None)
+                setattr(new,k,new_attr)
+
+        new.Nconf = len(new)
+        
+        return new 
+
+    def derivative(self,what,wrt="time",saved_as=None,*argc,**argv):
+
+        df = np.diff(self.properties[what],axis=0)
+        dt = np.diff(self.properties[wrt],axis=0)
+
+        dt = dt.append(dt[-1])
+        dt = dt.append(dt[-1])
+
+        der = np.outer(df,1.0/dt) 
+
+        if saved_as is not None:
+            self.add_property(name=saved_as,array=der,*argc,**argv)
+        
+        return der
+
+
+    def add_property(self,name,array,overwrite=False):
+        if len(self) != 0:
+            if len(self) != len(array):
+                raise ValueError("array with wrong length")
+        if name in self.properties:
+            print("Warning: '{:s}' in properties".format(name))
+            if overwrite :
+                print("Warning: '{:s}' will be overwritten".format(name))
+            else :
+                print("Warning: to overwrite '{:s}' set 'overwrite' = True ".format(name))
+        self.properties[name] = array
+        pass
+
+
+    def __len__(self):
+        if hasattr(self,"properties"):
+            k = next(iter(self.properties.keys()))
+            return len(self.properties[k])
+        else :
+            return 0
 
     # @reloading
     def vibrational_analysis_summary(self):
         """ summary of the vibrational analysis"""
-        print("Summary of the vibrational analysist:")
-        cols = [ "eigvals [a.u.]" , "w [a.u.]", "w [THz]", "w [cm^-1]", "T [a.u.]", "T [ps]","E [a.u.]", "n [a.u.]"]
-        df = pd.DataFrame(columns=cols)
+        print("Summary of the vibrational analysis:")
+        #cols = [ "eigvals [a.u.]" , "w [a.u.]", "w [THz]", "w [cm^-1]", "T [a.u.]", "T [ps]","E [a.u.]", "n [a.u.]"]
+        df = pd.DataFrame()
         eigvals = self.eigvals.copy()
         eigvals [ eigvals == MicroStatePrivate.smallest_float ] = np.nan
         df["eigvals [a.u.]"] = eigvals
@@ -940,8 +1068,13 @@ class MicroState:
         df["w [cm^-1]"] = convert(df["w [a.u.]"],"frequency",_from="atomic_unit",_to="inversecm")
         df["T [a.u.]"]  = 2*np.pi / df["w [a.u.]"]
         df["T [ps]"]    = convert(df["T [a.u.]"],"time",_from="atomic_unit",_to="picosecond")
-        df["E [a.u.]"]  = self.energy.mean(axis=0)
-        df["n [a.u.]"]  = self.occupations.mean(axis=0)
+
+        if hasattr(self,"energy"):
+            df["E [a.u.]"]  = self.energy.mean(axis=0)
+
+        if hasattr(self,"occupations"):
+            df["n [a.u.]"]  = self.occupations.mean(axis=0)
+
         return df
 
     # @reloading
@@ -976,3 +1109,401 @@ class MicroState:
         with open(file, 'rb') as f:
             obj = pickle.load(f)
         return obj
+    
+    @staticmethod
+    def _cart2lattice(array,lattice,matrixT=None,get_matrix=False,*argc,**argv):
+        """ Cartesian to lattice coordinates
+        
+        Input:
+            array: array in cartesian to be converted, shape (N,3)
+            lattice: lattice parameters, 
+                where the i^th basis vector is stored in the i^th columns
+                (it's the opposite of ASE, QE, FHI-aims)
+                lattice : 
+                    | a_1x a_2x a_3x |
+                    | a_1y a_2y a_3y |
+                    | a_1z a_2z a_3z |
+        Output:
+            array in fractional coordinates, shape (N,3)
+
+        Notes:
+            R = C @ X   -->   X = C^{-1} @ R
+            R are the cartesian coordinates of 1 configuration, shape (3,1)
+            X are the fractional coordinates of 1 configuration, shape (3,1)
+            C are the lattice parameters, shape (3,3)
+        """
+        # if array.shape[1] != 3 :
+        #     raise ValueError("array with wrong shape:",array.shape)
+        if lattice.shape != (3,3):
+            raise ValueError("lattice with wrong shape:",lattice.shape)
+        
+        # speed-up if I have many coordinates but the same lattice
+        if matrixT is None:
+            # I have to divide normalize the lattice parameters
+            length = np.linalg.norm(lattice,axis=1)
+            matrixT = deepcopy(lattice)
+            # normalize the columns
+            for i in range(3):
+                matrixT[:,i] /= length[i]
+            matrixT = np.linalg.inv( matrixT ).T
+
+        # I should do 
+        #   return ( inv @ array.T ).T
+        # but it is equal to array @ matrix.T
+        out = array @ matrixT
+        if get_matrix:
+            return out, matrixT
+        else :
+            return out
+    
+    @staticmethod
+    def _lattice2cart(array,lattice,matrixT=None,*argc,**argv):
+        """ Lattice to Cartesian coordinates
+        
+        Input:
+            array: array in fractional to be converted, shape (N,3)
+            lattice: lattice parameters, 
+                where the i^th basis vector is stored in the i^th columns
+                (it's the opposite of ASE, QE, FHI-aims)
+                lattice : 
+                    | a_1x a_2x a_3x |
+                    | a_1y a_2y a_3y |
+                    | a_1z a_2z a_3z |
+        Output:
+            array in cartesian coordinates, shape (N,3)
+
+        Noted:
+            R = C @ X
+            R are the cartesian coordinates of 1 configuration, shape (3,1)
+            X are the fractional coordinates of 1 configuration, shape (3,1)
+            C are the lattice parameters, shape (3,3)
+        """
+        # if array.shape[1] != 3 :
+        #     raise ValueError("array with wrong shape:",array.shape)
+        if lattice.shape != (3,3):
+            raise ValueError("lattice with wrong shape:",lattice.shape)
+        
+        # I should do 
+        #   return ( inv @ array.T ).T
+        # but it is equal to
+
+        if matrixT is None:
+            length = np.linalg.norm(lattice,axis=1)
+            matrixT = deepcopy(lattice)
+            # normalize the columns
+            for i in range(3):
+                matrixT[:,i] /= length[i]
+            matrixT = matrixT.T
+
+        return array @ matrixT
+    
+    def cart2lattice(self,*argc,**argv):
+        return self.trasform_basis(func=MicroState._cart2lattice,*argc,**argv)
+    
+    def lattice2cart(self,*argc,**argv):
+        return self.trasform_basis(func=MicroState._lattice2cart,*argc,**argv)
+    
+    def trasform_basis(self,func,what=None,array=None,unit=None,family=None,same_lattice=True,reshape=None):
+
+        if same_lattice:
+
+            from functions import print_cell
+            
+            lattice = deepcopy(self.cell[0])
+            print_cell(lattice)
+
+            if array is None :
+                array = self.properties[what]
+
+            if unit is None :
+                unit = self.units[what]
+
+            factor = convert(1,_from=unit,_to="atomic_unit",family=family)
+            array *= factor 
+            
+            print(" array shape:",array.shape)
+
+            out = np.zeros(array.shape)
+            matrixT = None
+            for n,pol in enumerate(array):
+                if reshape is not None:
+                    pol = pol.reshape(reshape)
+                p = func(pol,lattice,matrixT,get_matrix=n==0)
+                if type(p) == tuple and n == 0 :
+                    matrixT = p[1]
+                    p = p[0]
+                out[n,:] = p.reshape(pol.shape)
+
+            factor = convert(1,family=family,_from="atomic_unit",_to=unit)
+            return out * factor
+    
+        else :
+            raise ValueError("not implemented yet")
+        
+    
+    #def fix_polarization(self,N=5,deg=3,jumps=5,start=-1,same_lattice=True,thr=0.05):
+    def fix_polarization(self,same_lattice=True):
+        """ Fix polarization jumps
+        
+            Attention:
+                - the lattice parameters have to be in atomic_unit
+                - the polarization is automatically converted into atomic_unit,
+                    so you can not to worry about its measure unit
+        """
+
+        # assert deg > 0
+        # assert N > deg + 1
+        # assert jumps > 0
+
+        # n_jumps = np.asarray(np.linspace(-jumps,+jumps,2*jumps+1),dtype=int)
+        # jumps = np.asarray(n_jumps,dtype=float)# 2* np.pi
+        # res = np.zeros(len(jumps))
+        # y = np.zeros(N+1)
+        # x = np.zeros(N+1)
+
+        #if start == -1 :
+        #    start = N
+
+        # if start < N :
+        #     print("!Warning: 'start' has to be greater or equal to 'N' --> automatically setting it to 'N'")
+        #     start = N
+
+        
+        
+        polarization = self.cart2lattice(what="totalpol",\
+                                         family="polarization",\
+                                         same_lattice=same_lattice,\
+                                         reshape=None)
+
+        lattice = self.cell[0]
+        volume = np.linalg.det(lattice)
+        length = np.linalg.norm(lattice,axis=0)
+
+        # phases periodic in [0,1)
+        phases = np.zeros(polarization.shape)
+
+        for xyz in range(3):
+            phases[:,xyz] = polarization[:,xyz]*volume/(length[xyz]) # e == 1 in a.u
+
+            # pay attention:
+            # this phases are not included in [0,2pi) !!
+           
+        #time = self.convert_property("time",unit="atomic_unit",family="time")
+        
+
+        # ix = np.concatenate(([False],np.diff(polarization[:,0]) < thr))
+        # iy = np.concatenate(([False],np.diff(polarization[:,1]) < thr))
+        # iz = np.concatenate(([False],np.diff(polarization[:,2]) < thr))
+        # index = np.logical_and(np.logical_and(ix,iy),iz)
+        # ii = np.where(index)
+
+        # phases = phases[ii]
+        # time   = time[ii]
+
+        old_phases = deepcopy(phases)
+
+        # end = len(phases)
+        # if start > end :
+        #     raise ValueError("'start' greater than polarization length")
+
+        for xyz in range(3): # cycle over the 3 directions
+            phase = deepcopy(phases[:,xyz])
+
+            phases[:,xyz] = np.unwrap(phases[:,xyz],discont=0.0,period=1)
+            continue
+            
+            print("{:d} - std( d phi /dt ): {:10.4e}".format(xyz,np.std(np.diff(phase))))
+            k = 0
+            for n in range(start,end):
+
+                # x = time[n-N-k:n-k]
+                # y = phase[n-N-k:n-k]
+
+                # # assert len(x) == N
+                # # assert len(y) == N
+
+                # z = np.polyfit(x,y,deg)
+                # poly = np.poly1d(z)
+
+                # # extrapolate data
+                # yex = poly(time[n])
+
+                # # difference w.r.t. measured value
+                # delta = np.absolute(yex - (phase[n] + jumps))
+
+                # # index of the "branch"
+                # nn = delta.argmin()
+                
+                
+                # x[:-1] = time[n-N-k:n-k]
+                # # y = phase[n-N:n]
+                # y[:-1] = phase[n-N-k:n-k]
+
+                # for i,j in enumerate(jumps):
+                #     x[-1] = time[n]
+                #     y[-1] = phase[n]+j
+                #     p, res[i], _, _, _ = np.polyfit(x,y,deg,full=True)
+                #     #res[i] = res
+
+                # # index of the "branch"
+                # nn = res.argmin()
+
+
+                #x = time[n-N:n+1]
+                # y = phase[n-N:n]
+                y[:-1] = phase[n-N-k:n-k]
+
+                for i,j in enumerate(jumps):
+                    y[-1] = phase[n]+j
+                    res[i] = np.std(np.diff(y))
+                    #p, res[i], _, _, _ = np.polyfit(x,y,deg,full=True)
+                    #res[i] = res
+
+                # index of the "branch"
+                nn = res.argmin()
+
+                if jumps[nn] != 0 :
+                    phase[n] = phase[n] + jumps[nn]
+                    k += 1
+                else :
+                    k = 0
+
+
+
+            phases[:,xyz] = deepcopy(phase)
+
+            print("  - std( d phi*/dt ): {:10.4e}".format(np.std(np.diff(phases[:,xyz]))))
+
+        quantum = np.zeros(3)
+        polarization = np.zeros((len(phases),3))
+        for xyz in range(3):            
+            polarization[:,xyz] = phases[:,xyz]*length[xyz]/volume
+            quantum[xyz] = length[xyz]/volume
+
+        polarization = self.lattice2cart(array=polarization,\
+                                         family="polarization",\
+                                         unit=self.units["totalpol"],\
+                                         same_lattice=same_lattice,\
+                                         reshape=None)
+        
+        quantum = self.lattice2cart(array=quantum.reshape((1,3)),\
+                                         family="polarization",\
+                                         unit=self.units["totalpol"],\
+                                         same_lattice=same_lattice,\
+                                         reshape=None).flatten()
+
+        # factor = convert(1,_from="atomic_unit",_to=self.units["totalpol"],family="polarization")
+        # polarization *= factor 
+
+        #print(np.linalg.norm(polarization - self.properties["totalpol"]))
+
+        return polarization, quantum, phases, old_phases
+
+
+def main():
+
+    options = {"properties" : "i-pi.properties.out",\
+               "velocities":"i-pi.velocities_0.xyz",\
+               "cells" : "i-pi.positions_0.xyz"}
+    self = MicroState(options)
+    self.show()
+    self.show_properties()
+    pol, quantum, phases, old_phases = self.fix_polarization()
+
+    xyz = 0
+    x = np.arange(len(pol)-1)
+
+
+    fig,ax = plt.subplots()
+    ax.scatter(np.diff(np.linalg.norm(self.velocities,axis=1)),np.diff(np.linalg.norm(phases,axis=1)),color="red",label="new",s=0.1)
+
+    # fig,ax = plt.subplots()
+    # y = phases[:,xyz]
+    # ax.scatter(np.arange(len(y)),y,color="red",label="new",s=0.1)
+
+    # y = old_phases[:,xyz]
+    # ax.scatter(np.arange(len(y)),y,color="blue",label="old",s=0.1)
+    # m = old_phases[0,xyz]
+    # ylims = ax.get_ylim()
+    # xlims = ax.get_xlim()
+    # for i in range(-10,10):
+    #     plt.hlines(m+i,xlims[0],xlims[1],color="black",linestyle="dashed",alpha=0.5)
+    # ax.set_ylim(ylims)
+
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+
+    # fig,ax = plt.subplots()
+    # ax.scatter(x,pol[:,xyz],color="red",label="new",s=0.1)
+    # ax.scatter(x,self.properties["totalpol"][:,xyz],color="blue",label="old",s=0.1)
+    # m = self.properties["totalpol"][0,xyz]
+    # ylims = ax.get_ylim()
+    # xlims = ax.get_xlim()
+    # for i in range(-10,10):
+    #     plt.hlines(m+quantum[xyz]*i,xlims[0],xlims[1],color="black",linestyle="dashed",alpha=0.5)
+    # ax.set_ylim(ylims)
+
+    # plt.legend()
+    # plt.grid()
+    # plt.tight_layout()
+    # plt.show()
+
+    # plt.scatter(x,pol[:,0]-self.properties["totalpol"][:,0],color="red",label="x",s=0.1)
+    # plt.scatter(x,pol[:,1]-self.properties["totalpol"][:,1],color="blue",label="y",s=0.1)
+    # plt.scatter(x,pol[:,2]-self.properties["totalpol"][:,2],color="green",label="z",s=0.1)
+
+    # #index = np.absolute( pol[:,xyz] - self.properties["totalpol"][:,xyz] ) > 1e-6 
+
+    # # plt.scatter(x[index],pol[index,xyz],color="red",label="new",s=0.1)
+    # # plt.scatter(x[index],self.properties["totalpol"][index,xyz],color="blue",label="old",s=0.1)
+
+
+    # plt.legend()
+    # plt.grid()
+    # plt.tight_layout()
+    # plt.show()
+
+
+    
+
+
+    print("\n\tJob done :)\n")
+
+if __name__ == "__main__":
+    main()
+
+
+# def _main():
+
+#     options = {"modes":"vib","relaxed":"start.xyz","types":"start.xyz"}
+#     what = "vib"
+#     toread = ["relaxed","types"]
+#     data = MicroState(options=options,toread=toread,what=what)
+
+#     df = data.vibrational_analysis_summary()
+#     print(df)
+
+#     x = 2.0
+#     displ_P  = np.linspace(-x,x,11)
+#     displ_IR = np.linspace(-x,x,11)
+
+#     from itertools import product    
+#     import pandas as pd
+#     displ = np.asarray(list(product(displ_P, displ_IR)))
+#     df = pd.DataFrame(columns=["P","IR"],index=np.arange(len(displ)))
+  
+#     positions = np.zeros((len(displ),*data.relaxed.reshape(-1,3).shape))
+#     for n,(a,b) in enumerate(displ):
+#         amplitudes = {8:a,26:b}    
+#         df.at[n,"P"] = a
+#         df.at[n,"IR"] = b
+#         positions[n] = data.displace_along_normal_mode(amplitudes)
+
+#     data.save2xyz(positions,file="sequence.xyz",atoms=data.types[0])
+#     df.to_csv("info.csv",index=False)
+
+
+#     print("\n\tJob done :)\n")

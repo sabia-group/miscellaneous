@@ -106,8 +106,8 @@ def prepare_parser():
         help="output folder", default="output"
     ) 
     parser.add_argument(
-        "-pr", "--property", action="store", type=str,metavar='\b',
-        help="file containing the property at each MD step computed by i-PI"#, default=None
+        "-pr", "--properties", action="store", type=str,metavar='\b',
+        help="file containing the properties at each MD step computed by i-PI"#, default=None
     )
 
     parser.add_argument(

@@ -113,12 +113,7 @@ def prepare_parser():
 
     return options
 
-def main():
-    """main routine"""
-
-    # prepare/read input arguments
-    print("\tReading script input arguments")
-    options = prepare_parser()
+def get_data(options):
 
     print("\tReading json file")
     # # Open the JSON file and load the data
@@ -168,6 +163,16 @@ def main():
             value = convert(value,family,unit,"atomic_unit")
             data[key] = value
 
+    return data
+
+def main():
+    """main routine"""
+
+    # prepare/read input arguments
+    print("\tReading script input arguments")
+    options = prepare_parser()
+
+    data = get_data(options)
 
     Ef = ElectricField( Eamp=data["Eamp"],\
                         Ephase=data["Ephase"],\
@@ -179,147 +184,7 @@ def main():
     Ef_plot(Ef,data,options)
 
     # plot of the E-field FFT
-    FFT_plot(Ef,data,options)
-
-    # fig, ax1 = plt.subplots(figsize=(12,6))
-
-    # #x = ts["time"]#/4.1341373e3 #np.arange(len(data.occupations[:,0]))/10
-    # y = ts["conserved"] #data.energy.sum(axis=1)
-    # energy = y - np.mean(y)
-
-    # ax1.plot(x,energy,color="red",label="$\\Delta \\mathcal{H}^{\\mathbf{0}}_n$")
-    # ax1.plot(x,np.linspace(energy[0],energy[0],len(x)),color="black",alpha=0.7,linestyle="dashed",label="$\\mathcal{H}^{\\mathbf{0}}_n\\left(t=0\\right)$")
-
-    # ax2 = ax1.twinx()
-    # Efield = np.dot(ts["Efield"], v)
-    # ax2.plot(x,Efield,color="blue",label="$\\mathbf{E}\\cdot\\mathbf{v}$",alpha=0.4)
-
-    # ax1.set_ylabel("energy (a.u.)")
-    # ax2.set_ylabel("E-field (a.u.)")
-    # ax1.xaxis.grid()
-    # ax1.yaxis.grid()
-
-    # ax1.set_xlabel('time (ps)')
-    # ax1.set_title('LiNbO$_3$ (NVE@$0K$,$\\Delta t = 1fs$,E$_{max}$=$10^{-3}$ a.u., 19THz)')
-    # ax1.set_xlim(min(x),max(x))
-
-    # fact_dw = 5
-    # fact_up = 15
-
-    # n = 7
-    # a,b = ax1.get_ylim()
-    # c = a - (b-a)*fact_dw/100
-    # d = b + (b-a)*fact_up/100
-    # ax1.set_yticks(np.linspace(c,d, n))
-
-    # a,b = ax2.get_ylim()
-    # c = a - (b-a)*fact_dw/100
-    # d = b + (b-a)*fact_up/100
-    # ax2.set_yticks(np.linspace(c,d, n))
-
-    # lines_1, labels_1 = ax1.get_legend_handles_labels()
-    # lines_2, labels_2 = ax2.get_legend_handles_labels()
-
-    # lines = lines_1 + lines_2
-    # labels = labels_1 + labels_2
-
-    # ax1.legend(lines, labels, loc=0)
-
-    # ax1.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
-    # ax2.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
-
-    # # Save the figure and show
-    # plt.tight_layout()
-    # plt.savefig("eda-nve.pdf")
-
-
-    # #######
-    # fig, ax1 = plt.subplots(figsize=(12,6))
-
-    # # x /= 4.1341373e4 # ps
-
-    # N = len(x)
-    # dt = x[1]-x[0]
-    # T = dt*N
-    # df = 1/T
-    # dw = 2*np.pi/T
-    # ny = dw*N/2
-    # w = np.array([dw*n if n<N/2 else dw*(n-N) for n in range(N)])
-    # f = np.array([df*n if n<N/2 else df*(n-N) for n in range(N)]) #THz
-
-    # Enfft = np.fft.rfft(energy)
-    # freq = np.fft.rfftfreq(len(energy), d=x[1]-x[0])    
-    # ax1.plot(freq,np.absolute(Enfft),color="red",label="$\\Delta \\mathcal{H}^{\\mathbf{0}}_n$",alpha=0.4,marker=".")
-    # #ax1.plot(w,np.absolute(Enfft),color="green",label="$\\Delta \\mathcal{H}^{\\mathbf{0}}_n$",alpha=0.4,marker=".")
-    # #ax1.scatter(freq,np.absolute(Enfft),color="red",marker="x")
-
-    # ax2 = ax1.twinx()
-    # Efft  = np.fft.rfft(Efield)
-    # freq = np.fft.rfftfreq(len(Efield), d=x[1]-x[0])
-    # ax2.plot(freq,np.absolute(Efft),color="blue",label="$\\mathbf{E}\\cdot\\mathbf{v}$",alpha=0.4,marker=".")
-    # #ax2.scatter(freq,np.absolute(Efft),color="blue",marker="+",alpha=0.4)
-
-    # ax1.set_yscale("log")
-    # ax2.set_yscale("log")
-    # ax1.set_xscale("log")
-
-    # ylim = ax1.get_ylim()
-    # ax1.set_ylim(1e-4,ylim[1])
-
-    # ax1.yaxis.set_major_locator(mtick.LogLocator(numticks=5))
-
-    # yticks = ax1.get_yticks()
-    # ax2.set_yticks(yticks)
-    # ax2.yaxis.set_major_locator(mtick.LogLocator(numticks=5))
-
-    # ylim = ax1.get_ylim()
-    # ax1.vlines(x=omega/(2*np.pi),ymin=ylim[0],ymax=ylim[1],label="$\\nu$=19THz",color="black",alpha=0.5)
-    # #ax1.vlines(x=2*np.pi*19,ymin=ylim[0],ymax=ylim[1],label="$\\omega$=19THz$\\times2\\pi$",color="brown",alpha=0.5)
-    # #ax1.vlines(x=19/(2*np.pi),ymin=ylim[0],ymax=ylim[1],label="$\\omega$=19THz$/2\\pi$",color="purple",alpha=0.5)
-
-    # # w = np.loadtxt("nu.txt")
-    # # xlim = ax1.get_xlim()
-    # # for i in w :
-    # #     ax1.vlines(x=i,ymin=ylim[0],ymax=ylim[1],color="black",alpha=0.5)
-    # # ax1.set_xlim(*xlim)
-    
-    # ax1.set_ylabel("energy (a.u.)")
-    # ax2.set_ylabel("E-field (a.u.)")
-    # ax1.set_xlabel('freq. (THz)')
-
-    # # ax1.set_ylim(1e-4,1e1)
-    # #ax2.set_ylim(1e-4,1e1)
-    # # n = 7
-    # # a,b = ax1.get_ylim()
-    # # c = a - (b-a)*fact_dw/100
-    # # d = b + (b-a)*fact_up/100
-
-    # lines_1, labels_1 = ax1.get_legend_handles_labels()
-    # lines_2, labels_2 = ax2.get_legend_handles_labels()
-
-    # lines = lines_1 + lines_2
-    # labels = labels_1 + labels_2
-
-    # ax1.legend(lines, labels, loc=0)
-    # ax1.set_title('LiNbO$_3$ (NVE@$0K$,$\\Delta t = 1fs$,E$_{max}$=$10^{-3}$ a.u., 19THz)')
-
-    # #yticks = [ 10**i for i in np.linspace(-10,2,4) ]
-    # #ax1.set_yticks(yticks)
-    # #ax1.set_ylim(min(yticks)/100,max(yticks))
-
-    # #yticks = [ 10**i for i in np.linspace(-1,1,4) ]
-    # #ax2.set_yticks(yticks)
-    # #ax2.set_ylim(min(yticks),max(yticks))
-
-
-    # #plt.xlim(0.001,5)
-    # # plt.legend()
-    # ax1.grid()#which='both',axis='both')
-    # #ax2.grid()
-    # plt.tight_layout()
-    # plt.savefig("FFT.pdf")
-
-
+    #FFT_plot(Ef,data,options)
 
     print("\n\tJob done :)\n")
 
